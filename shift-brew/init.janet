@@ -84,11 +84,11 @@
   (draw-fps 10 10)
   (end-drawing)
 
-  # (begin-texture-mode target)
-  # (draw-circle 300 400 40 white)
-  # (end-texture-mode)
-  # (draw-texture (get-texture-default) 0 0 :white)
-  # (draw-texture-rec target.texture 0 0 screen-width screen-height [0 0] :white)
+  (begin-texture-mode target)
+  (draw-circle 300 400 40 white)
+  (end-texture-mode)
+  (draw-texture (get-texture-default) 0 0 :white)
+  (draw-texture-rec target.texture 0 0 screen-width screen-height [0 0] :white)
   )
 
 (unload-render-texture target)

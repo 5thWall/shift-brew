@@ -5,20 +5,53 @@
 (def *screen-width* 800)
 (def *screen-height* 800)
 (def *grav-constant* 0.3)
+(def *damp* 0.8)
 
 (def GS (gamestate/init))
+
+# Array of rectangles
+(def *cup*
+  [
+   # WALL
+   # [0 (/ *screen-height* 2) *screen-width* 10]
+
+   # BASE
+   [(- (/ *screen-width* 2) 100)
+    (- *screen-height* 55)
+    200 10]
+
+   # Left
+   [(- (/ *screen-width* 2) 105)
+    (- *screen-height* (+ 50 50))
+    10 50]
+   [(- (/ *screen-width* 2) 110)
+    (- *screen-height* (+ 50 50 45))
+    10 50]
+   [(- (/ *screen-width* 2) 115)
+    (- *screen-height* (+ 50 50 45 45))
+    10 50]
+   [(- (/ *screen-width* 2) 120)
+    (- *screen-height* (+ 50 50 45 45 45))
+    10 50]
+
+   # Right
+   [(+ (/ *screen-width* 2) 95)
+    (- *screen-height* (+ 50 50))
+    10 50]
+   [(+ (/ *screen-width* 2) 100)
+    (- *screen-height* (+ 50 50 45))
+    10 50]
+   [(+ (/ *screen-width* 2) 105)
+    (- *screen-height* (+ 50 50 45 45))
+    10 50]
+   [(+ (/ *screen-width* 2) 110)
+    (- *screen-height* (+ 50 50 45 45 45))
+    10 50]])
 
 # Components
 (def-component-alias position vector/from-named)
 (def-component-alias velocity vector/from-named)
 (def-component circle :radius :number :color (any))
-(def-component cup
-  :h :number
-  :wb :number
-  :wt :number
-  :x :number
-  :y :number
-  )
 (def-tag gravity)
 
 # System Callbacks
@@ -33,32 +66,33 @@
   (each [pos circle] circles
     (draw-circle
       (math/floor (pos :x)) (math/floor (pos :y))
-     (circle :radius) (circle :color))))
-
-(defn cup-points
-  "Returns struct of points on cup"
-  [cup]
-  { :tl { :x (- (cup :x) (cup :wt))
-          :y (- (cup :y) (cup :h)) }
-    :bl { :x (- (cup :x) (cup :wb))
-          :y (cup :y) }
-    :tr { :x (+ (cup :x) (cup :wt))
-          :y (- (cup :y) (cup :h)) }
-    :br { :x (+ (cup :x) (cup :wb))
-          :y (cup :y) } })
+      (circle :radius) (circle :color))))
 
 (def-system sys-draw-cup
-  { cups [:cup] }
-  (each [cup] cups
-    (let [{ :tl tl :bl bl :tr tr :br br } (cup-points cup)]
-      (draw-line (tl :x) (tl :y) (bl :x) (bl :y) blue)
-      (draw-line (bl :x) (bl :y) (br :x) (br :y) blue)
-      (draw-line (br :x) (br :y) (tr :x) (tr :y) blue))))
+  { wld :world }
+  (each rec *cup*
+    (draw-rectangle-rec rec blue)))
 
 (def-system sys-gravity
   { falling [:velocity :gravity] }
   (each [vel] falling
     (put vel :y (+ (vel :y) (* dt *grav-constant*)))))
+
+(defn between [comp first second]
+  (if (> first second)
+    (and (< first comp) (> second comp))
+    (and (> first comp) (< second comp))))
+
+(def-system sys-element-cup-collision
+  { elements [:position :velocity :circle] }
+  (each [pos vel elm] elements
+    (each rec *cup*
+      (when (check-collision-circle-rec [(pos :x) (pos :y)] (elm :radius) rec)
+        (if (not (between (pos :x) (rec 0) (+ (rec 0) (rec 2))))
+          (put vel :x (- (* (vel :x) *damp*))))
+        (if (not (between (pos :y) (rec 1) (+ (rec 1) (rec 3))))
+          (put vel :y (- (* (vel :y) *damp*))))
+        (put elm :color red)))))
 
 (gamestate/def-state
   pause
@@ -77,20 +111,18 @@
             (loop [i :range [1 5]]
               (add-entity world
                           (position :x (* i (/ *screen-width* 5)) :y 0.0)
-                          (velocity :x 0 :y 0)
+                          (velocity :x 1 :y 0)
                           (gravity)
-                          (circle :radius 5 :color peach)))
-
-           (add-entity world
-                       (cup :h 400 :wt 225 :wb 100
-                            :x (/ *screen-width* 2) :y (- *screen-height* 50)))
+                          (circle :radius 5 :color green)))
 
            # Systems
-           (register-system (self :world) sys-move)
-           (register-system (self :world) sys-gravity)
-           (register-system (self :world) sys-draw-circle)
-           (register-system (self :world) sys-draw-cup)
-           ))
+            (register-system (self :world) sys-move)
+            (register-system (self :world) sys-gravity)
+            (register-system (self :world) sys-element-cup-collision)
+            (register-system (self :world) sys-draw-circle)
+            (register-system (self :world) sys-draw-cup)
+            ))
+
  :update (fn game-update [self dt]
            (:update (self :world) dt)
 

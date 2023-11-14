@@ -94,31 +94,49 @@
           (put vel :y (- (* (vel :y) *damp*))))
         (put elm :color red)))))
 
-(def-system sys-element-element-collision
-  { elements [:position :velocity :circle] }
-  (each [pos1 vel1 elm1] elements
-    (each [pos2 vel2 elm2] elements
-      (def posc @{ :x (+ (pos1 :x) (vel1 :x))
-                   :y (+ (pos1 :y) (vel1 :y)) })
-      (when (and (not (and (= pos1 pos2) (= vel1 vel2)))
-                 (check-collision-circles [(posc :x) (posc :y)] (elm1 :radius)
-                                          [(pos2 :x) (pos2 :y)] (elm2 :radius)))
-        (def t1 (:normalize (vector/new (- (- (pos2 :x) (pos1 :x)))
-                                             (- (pos2 :y) (pos1 :y)))))
-        (def rv1 (vector/new (- (vel2 :x) (vel1 :y))
-                                 (- (vel2 :y) (vel1 :y))))
-        # (def vec-len (vector/length (vector/preject-on rel-vel tangent)))
-        # Subtract relative velocity projected on tangent
-        # Add relative velocity mirrored on tangent
-        (let [{ :x nx :y ny } (vector/mirror-on rv1 t1)]
-          (put vel1 :x nx)
-          (put vel1 :y nx))
-        (put elm1 :color sapphire)))))
+(defn in? [element list]
+  (var found? false)
+    (loop [el :in list
+           :until found?]
+      (if (= el element)
+        (set found? true)))
+    found?)
 
-(defn loop-test [elements]
-  (loop [e1 :iterate (array/pop elements)
-         e2 :in elements]
-    (printf "%i, %i" e1 e2)))
+(def-system sys-element-element-collision
+  { elements [:entity :position :velocity :circle] }
+  (loop [[ent1 pos1 vel1 elm1] :in elements
+         [ent2 pos2 vel2 elm2] :in elements]
+    (def checked @[])
+    (def posc @{ :x (+ (pos1 :x) (vel1 :x))
+                :y (+ (pos1 :y) (vel1 :y)) })
+    (when (and (not= ent1 ent2)
+               (not (in? [ent2 ent1] checked))
+               (check-collision-circles [(posc :x) (posc :y)] (elm1 :radius)
+                                        [(pos2 :x) (pos2 :y)] (elm2 :radius)))
+      (print "OOF!")
+      (array/push checked [ent1 ent2])
+
+      (def tan1 (:normalize (vector/new (- (- (pos2 :x) (pos1 :x)))
+                                       (- (pos2 :y) (pos1 :y)))))
+      (def tan2 (vector/rotate tan1 math/pi))
+      (def rv1 (:multiply (vector/new (- (vel2 :x) (vel1 :y))
+                                     (- (vel2 :y) (vel1 :y)))
+                         0.5))
+      (def rv2 (:multiply rv1 -1))
+      (let [{ :x nx1 :y ny1 } (vector/mirror-on rv1 tan1)
+            { :x nx2 :y ny2 } (vector/mirror-on rv2 tan2)]
+        (put vel1 :x (+ (- (vel1 :x) nx2) nx1))
+        (put vel1 :y (+ (- (vel1 :y) ny2) ny1))
+        (put vel2 :x (+ (- (vel2 :x) nx1) nx2))
+        (put vel2 :y (+ (- (vel2 :y) ny1) ny2)))
+      (put elm1 :color sapphire)
+      (put elm2 :color sapphire)
+      ))
+
+  (defn loop-test [elements]
+    (loop [e1 :in elements
+           e2 :in elements]
+      (printf "%i, %i" e1 e2))))
 
 (gamestate/def-state
   pause
@@ -134,42 +152,35 @@
   :init (fn game-init [self]
           (let [world (get self :world)]
             # Add initial circles
-            (loop [i :range [1 10]]
-              (let [x (- 100 (* 200 (math/random)))
-                    y (* 100 (math/random))
-                    dx (- 1 (* 2 (math/random)))
-                    dy (- 1 (* 2 (math/random)))]
-                (add-entity world
-                            (position :x (+ (/ *screen-width* 2) x) :y y)
-                            (velocity :x dx :y dy)
-                            (gravity)
-                            (circle :radius 5 :color green))))
-
-            # (add-entity world
-            #             (position :x (+ 50 (/ *screen-width* 2)) :y 25.0)
-            #             (velocity :x (- 1 (* 2 (math/random))) :y 0)
-            #             (gravity)
-            #             (circle :radius 5 :color green))
-            # (add-entity world
-            #             (position :x (- 50 (/ *screen-width* 2)) :y 25.0)
-            #             (velocity :x (- 1 (* 2 (math/random))) :y 0)
-            #             (gravity)
-            #             (circle :radius 5 :color green))
+            # (loop [i :range [1 25]]
+            #   (let [x (- 200 (* 400 (math/random)))
+            #         y (* 200 (math/random))
+            #         dx (- 1 (* 2 (math/random)))
+            #         dy (- 1 (* 2 (math/random)))]
+            #     (add-entity world
+            #                 (position :x (+ (/ *screen-width* 2) x) :y y)
+            #                 (velocity :x dx :y dy)
+            #                 (gravity)
+            #                 (circle :radius 5 :color green))))
 
            # Systems
-            (register-system (self :world) sys-move)
-            (register-system (self :world) sys-gravity)
-            (register-system (self :world) sys-element-cup-collision)
-            (register-system (self :world) sys-element-element-collision)
-            (register-system (self :world) sys-draw-circle)
-            (register-system (self :world) sys-draw-cup)
+            (register-system world sys-element-cup-collision)
+            (register-system world sys-element-element-collision)
+            (register-system world sys-move)
+            (register-system world sys-gravity)
+            (register-system world sys-draw-circle)
+            (register-system world sys-draw-cup)
             ))
 
  :update (fn game-update [self dt]
            (:update (self :world) dt)
 
            (when (key-pressed? :space)
-             (:pause-game GS))))
+             (add-entity (self :world)
+                         (position :x (/ *screen-width* 2) :y 25.0)
+                         (velocity :x (- 2 (* 4 (math/random))) :y 2.2)
+                         (gravity)
+                         (circle :radius 5 :color green)))))
 
 (:add-state GS pause)
 (:add-state GS game)

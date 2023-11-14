@@ -4,8 +4,9 @@
 
 (def *screen-width* 600)
 (def *screen-height* 400)
-(def *grav-constant* 0.5)
-(def *damp* 0.65)
+(def *gravity* 0.89)
+(def *damp* 0.45)
+(def *friction* 0.9999999999)
 
 (def GS (gamestate/init))
 
@@ -16,37 +17,60 @@
    # [0 (/ *screen-height* 2) *screen-width* 10]
 
    # BASE
-   [(- (/ *screen-width* 2) 100)
-    (- *screen-height* 55)
-    200 10]
+   [(- (/ *screen-width* 2) 110)
+    (- *screen-height* 50)
+    220 20]
+
+   #big left wall
+   [(- (/ *screen-width* 2) 110)
+    (- *screen-height* 300)
+    20 270]
+
+   # big right wall
+   [(+ (/ *screen-width* 2) 90)
+    (- *screen-height* 300)
+    20 270]
 
    # Left
-   [(- (/ *screen-width* 2) 105)
-    (- *screen-height* (+ 50 50))
-    10 50]
-   [(- (/ *screen-width* 2) 110)
-    (- *screen-height* (+ 50 50 45))
-    10 50]
-   [(- (/ *screen-width* 2) 115)
-    (- *screen-height* (+ 50 50 45 45))
-    10 50]
-   [(- (/ *screen-width* 2) 120)
-    (- *screen-height* (+ 50 50 45 45 45))
-    10 50]
+   # [(- (/ *screen-width* 2) 105)
+   #  (- *screen-height* (+ 50 50))
+   #  10 50]
+   # [(- (/ *screen-width* 2) 110)
+   #  (- *screen-height* (+ 50 50 45))
+   #  10 50]
+   # [(- (/ *screen-width* 2) 115)
+   #  (- *screen-height* (+ 50 50 45 45))
+   #  10 50]
+   # [(- (/ *screen-width* 2) 120)
+   #  (- *screen-height* (+ 50 50 45 45 45))
+   #  10 50]
+   # [(- (/ *screen-width* 2) 125)
+   #  (- *screen-height* (+ 50 50 45 45 45 45))
+   #  10 50]
+   # [(- (/ *screen-width* 2) 130)
+   #  (- *screen-height* (+ 50 50 45 45 45 45 45))
+   #  10 50]
 
    # Right
-   [(+ (/ *screen-width* 2) 95)
-    (- *screen-height* (+ 50 50))
-    10 50]
-   [(+ (/ *screen-width* 2) 100)
-    (- *screen-height* (+ 50 50 45))
-    10 50]
-   [(+ (/ *screen-width* 2) 105)
-    (- *screen-height* (+ 50 50 45 45))
-    10 50]
-   [(+ (/ *screen-width* 2) 110)
-    (- *screen-height* (+ 50 50 45 45 45))
-    10 50]])
+   # [(+ (/ *screen-width* 2) 95)
+   #  (- *screen-height* (+ 50 50))
+   #  10 50]
+   # [(+ (/ *screen-width* 2) 100)
+   #  (- *screen-height* (+ 50 50 45))
+   #  10 50]
+   # [(+ (/ *screen-width* 2) 105)
+   #  (- *screen-height* (+ 50 50 45 45))
+   #  10 50]
+   # [(+ (/ *screen-width* 2) 110)
+   #  (- *screen-height* (+ 50 50 45 45 45))
+   #  10 50]
+   # [(+ (/ *screen-width* 2) 115)
+   #  (- *screen-height* (+ 50 50 45 45 45 45))
+   #  10 50]
+   # [(+ (/ *screen-width* 2) 120)
+   #  (- *screen-height* (+ 50 50 45 45 45 45 45))
+   #  10 50]
+   ])
 
 # Components
 (def-component-alias position vector/from-named)
@@ -76,22 +100,28 @@
 (def-system sys-gravity
   { falling [:velocity :gravity] }
   (each [vel] falling
-    (put vel :y (+ (vel :y) (* dt *grav-constant*)))))
-
-(defn between [comp first second]
-  (if (> first second)
-    (and (< first comp) (> second comp))
-    (and (> first comp) (< second comp))))
+    (:multiply vel *friction*)
+    (if (< (vector/vlength vel) 0.3)
+      (:multiply vel 0))
+    (:add vel (vector/new 0 *gravity*))))
 
 (def-system sys-element-cup-collision
   { elements [:position :velocity :circle] }
   (each [pos vel elm] elements
     (each rec *cup*
       (when (check-collision-circle-rec [(pos :x) (pos :y)] (elm :radius) rec)
-        (if (not (between (pos :x) (rec 0) (+ (rec 0) (rec 2))))
-          (put vel :x (- (* (vel :x) *damp*))))
-        (if (not (between (pos :y) (rec 1) (+ (rec 1) (rec 3))))
-          (put vel :y (- (* (vel :y) *damp*))))
+        (when (> (pos :y) (rec 1))
+          (*= (vel :y) -1 *damp*)
+          (+= (vel :y) (elm :radius)))
+        (when (< (pos :y) (+ (rec 1) (rec 3)))
+          (*= (vel :y) -1 *damp*)
+          (-= (vel :y) (elm :radius)))
+        (when (> (pos :x) (+ (rec 0) (rec 2)))
+          (*= (vel :x) -1 *damp*)
+          (+= (vel :x) (elm :radius)))
+        (when (< (pos :x) (rec 0))
+          (*= (vel :x) -1 *damp*)
+          (-= (vel :x) (elm :radius)))
         (put elm :color red)))))
 
 (defn in? [element list]
@@ -117,13 +147,16 @@
             vy (- (vel2 :y) (vel1 :y))
             dot (+ (* dx vx) (* dy vy))]
         (when (> dot 0)
-          (print "OOF!")
           (array/push checked [ent1 ent2])
 
           (put vel1 :x (/ (+ (vel1 :x) (* 2 dx)) 2))
           (put vel1 :y (/ (+ (vel1 :y) (* 2 dy)) 2))
           (put vel2 :x (/ (+ (- (vel2 :x)) (* 2 dy)) 2))
           (put vel2 :y (/ (+ (- (vel2 :y)) (* 2 dy)) 2))
+          (*= (vel1 :x) *damp*)
+          (*= (vel1 :y) *damp*)
+          (*= (vel2 :x) *damp*)
+          (*= (vel2 :y) *damp*)
 
           # move element
           (put pos1 :x (+ (pos1 :x) (vel1 :x)))
@@ -175,9 +208,9 @@
            (when (key-pressed? :space)
              (add-entity (self :world)
                          (position :x (/ *screen-width* 2) :y 25.0)
-                         (velocity :x (- 1 (* 2 (math/random))) :y 2.2)
+                         (velocity :x (- 1 (* 2 (math/random))) :y 10)
                          (gravity)
-                         (circle :radius 5 :color green)))))
+                         (circle :radius 7 :color green)))))
 
 (:add-state GS pause)
 (:add-state GS game)

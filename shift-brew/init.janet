@@ -61,6 +61,10 @@
 (def-system sys-draw-fill
   { world :world
     elements [:element] }
+
+  (if filling
+    (draw-rectangle (+ 5 (/ *screen-width* 2)) 0 10 *fill-base-y* (*color-map* fill-type)))
+
   (var top-base *fill-base-y*)
   (loop [[{ :type type :amount amount }] :in elements
          :before (-= top-base amount)]

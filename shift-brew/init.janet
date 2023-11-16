@@ -4,169 +4,93 @@
 
 (def *screen-width* 600)
 (def *screen-height* 400)
-(def *gravity* 0.89)
-(def *damp* 0.45)
-(def *friction* 0.9999999999)
+(var filling false)
+(def *fill-types* [:bus :banter :auction :contest :game :dance])
+(def *color-map*
+  { :bus red
+    :banter peach
+    :auction blue
+    :contest green
+    :game yellow
+    :dance mauve })
+
+(var filled-amount 0)
+(var fill-type :game)
+(def *button-height* 30)
 
 (def GS (gamestate/init))
 
-# Array of rectangles
+(def *cup-color* sky)
 (def *cup*
   [
-   # WALL
-   # [0 (/ *screen-height* 2) *screen-width* 10]
-
    # BASE
    [(- (/ *screen-width* 2) 110)
     (- *screen-height* 50)
     220 20]
 
-   #big left wall
+   # LEFT
    [(- (/ *screen-width* 2) 110)
     (- *screen-height* 300)
     20 270]
 
-   # big right wall
+   # RIGHT
    [(+ (/ *screen-width* 2) 90)
     (- *screen-height* 300)
     20 270]
-
-   # Left
-   # [(- (/ *screen-width* 2) 105)
-   #  (- *screen-height* (+ 50 50))
-   #  10 50]
-   # [(- (/ *screen-width* 2) 110)
-   #  (- *screen-height* (+ 50 50 45))
-   #  10 50]
-   # [(- (/ *screen-width* 2) 115)
-   #  (- *screen-height* (+ 50 50 45 45))
-   #  10 50]
-   # [(- (/ *screen-width* 2) 120)
-   #  (- *screen-height* (+ 50 50 45 45 45))
-   #  10 50]
-   # [(- (/ *screen-width* 2) 125)
-   #  (- *screen-height* (+ 50 50 45 45 45 45))
-   #  10 50]
-   # [(- (/ *screen-width* 2) 130)
-   #  (- *screen-height* (+ 50 50 45 45 45 45 45))
-   #  10 50]
-
-   # Right
-   # [(+ (/ *screen-width* 2) 95)
-   #  (- *screen-height* (+ 50 50))
-   #  10 50]
-   # [(+ (/ *screen-width* 2) 100)
-   #  (- *screen-height* (+ 50 50 45))
-   #  10 50]
-   # [(+ (/ *screen-width* 2) 105)
-   #  (- *screen-height* (+ 50 50 45 45))
-   #  10 50]
-   # [(+ (/ *screen-width* 2) 110)
-   #  (- *screen-height* (+ 50 50 45 45 45))
-   #  10 50]
-   # [(+ (/ *screen-width* 2) 115)
-   #  (- *screen-height* (+ 50 50 45 45 45 45))
-   #  10 50]
-   # [(+ (/ *screen-width* 2) 120)
-   #  (- *screen-height* (+ 50 50 45 45 45 45 45))
-   #  10 50]
    ])
 
+(def *fill-base-x* (- (/ *screen-width* 2) 100))
+(def *fill-base-y* (- *screen-height* 49))
+(def *fill-width* 200)
+
 # Components
+(def-component element :type :keyword :amount :number)
+(def-component ui-element :type :keyword)
 (def-component-alias position vector/from-named)
-(def-component-alias velocity vector/from-named)
-(def-component circle :radius :number :color (any))
-(def-tag gravity)
+(def-component-alias size vector/from-named)
 
 # System Callbacks
-(def-system sys-move
-  {moveables [:position :velocity]}
-  (each [pos vel] moveables
-    (put pos :x (+ (pos :x) (* dt (vel :x))))
-    (put pos :y (+ (pos :y) (* dt (vel :y))))))
+(def-system sys-fill
+  { world :world }
+  (if filling
+    (++ filled-amount)
+    (when (> filled-amount 3)
+      (add-entity world (element :type fill-type :amount filled-amount))
+      (set filled-amount 0))))
 
-(def-system sys-draw-circle
-  { circles [:position :circle] }
-  (each [pos circle] circles
-    (draw-circle
-      (math/floor (pos :x)) (math/floor (pos :y))
-      (circle :radius) (circle :color))))
+(def-system sys-draw-fill
+  { world :world
+    elements [:element] }
+  (var top-base *fill-base-y*)
+  (loop [[{ :type type :amount amount }] :in elements
+         :before (-= top-base amount)]
+    (draw-rectangle
+      *fill-base-x* top-base
+      *fill-width* amount
+      (*color-map* type)))
+
+  (draw-rectangle
+    *fill-base-x* (- top-base filled-amount)
+    *fill-width* filled-amount
+    (*color-map* fill-type))
+  )
 
 (def-system sys-draw-cup
   { wld :world }
   (each rec *cup*
-    (draw-rectangle-rec rec blue)))
+    (draw-rectangle-rec rec *cup-color*)))
 
-(def-system sys-gravity
-  { falling [:velocity :gravity] }
-  (each [vel] falling
-    (:multiply vel *friction*)
-    (if (< (vector/vlength vel) 0.3)
-      (:multiply vel 0))
-    (:add vel (vector/new 0 *gravity*))))
-
-(def-system sys-element-cup-collision
-  { elements [:position :velocity :circle] }
-  (each [pos vel elm] elements
-    (each rec *cup*
-      (when (check-collision-circle-rec [(pos :x) (pos :y)] (elm :radius) rec)
-        (when (> (pos :y) (rec 1))
-          (*= (vel :y) -1 *damp*)
-          (+= (vel :y) (elm :radius)))
-        (when (< (pos :y) (+ (rec 1) (rec 3)))
-          (*= (vel :y) -1 *damp*)
-          (-= (vel :y) (elm :radius)))
-        (when (> (pos :x) (+ (rec 0) (rec 2)))
-          (*= (vel :x) -1 *damp*)
-          (+= (vel :x) (elm :radius)))
-        (when (< (pos :x) (rec 0))
-          (*= (vel :x) -1 *damp*)
-          (-= (vel :x) (elm :radius)))
-        (put elm :color red)))))
-
-(defn in? [element list]
-  (var found? false)
-    (loop [el :in list
-           :until found?]
-      (if (= el element)
-        (set found? true)))
-    found?)
-
-(def-system sys-element-element-collision
-  { elements [:entity :position :velocity :circle] }
-  (def checked @[])
-  (loop [[ent1 pos1 vel1 elm1] :in elements
-         [ent2 pos2 vel2 elm2] :in elements
-         :unless (= ent1 ent2)
-         :unless (in? [ent2 ent1] checked)]
-    (when (check-collision-circles [(pos1 :x) (pos1 :y)] (elm1 :radius)
-                                   [(pos2 :x) (pos2 :y)] (elm2 :radius))
-      (let [dx (- (pos1 :x) (pos2 :x))
-            dy (- (pos1 :y) (pos2 :y))
-            vx (- (vel2 :x) (vel1 :x))
-            vy (- (vel2 :y) (vel1 :y))
-            dot (+ (* dx vx) (* dy vy))]
-        (when (> dot 0)
-          (array/push checked [ent1 ent2])
-
-          (put vel1 :x (/ (+ (vel1 :x) (* 2 dx)) 2))
-          (put vel1 :y (/ (+ (vel1 :y) (* 2 dy)) 2))
-          (put vel2 :x (/ (+ (- (vel2 :x)) (* 2 dy)) 2))
-          (put vel2 :y (/ (+ (- (vel2 :y)) (* 2 dy)) 2))
-          (*= (vel1 :x) *damp*)
-          (*= (vel1 :y) *damp*)
-          (*= (vel2 :x) *damp*)
-          (*= (vel2 :y) *damp*)
-
-          # move element
-          (put pos1 :x (+ (pos1 :x) (vel1 :x)))
-          (put pos1 :y (+ (pos1 :y) (vel1 :y)))
-          (put pos2 :x (+ (pos2 :x) (vel2 :x)))
-          (put pos2 :y (+ (pos2 :y) (vel2 :y)))
-
-          (put elm1 :color sapphire)
-          (put elm2 :color sapphire)
-          )))))
+(def-system sys-draw-ui
+  { buttons [:ui-element :position :size] }
+  (each [element pos size] buttons
+    (draw-rectangle-v (vector/unpack pos) (vector/unpack size) (*color-map* (element :type)))
+    (draw-text (string (element :type))
+               ;(vector/unpack (:add (vector/clone pos) 7))
+               20 base)
+    (draw-text (string (element :type))
+               ;(vector/unpack (:add (vector/clone pos) 5))
+               20 text))
+  (draw-rectangle 0 *button-height* *screen-width* (/ *button-height* 2) (*color-map* fill-type)))
 
 (gamestate/def-state
   pause
@@ -181,36 +105,27 @@
   :world (create-world)
   :init (fn game-init [self]
           (let [world (get self :world)]
-            # add initial circles
-            # (loop [i :range [1 25]]
-            #   (let [x (- 200 (* 400 (math/random)))
-            #         y (* 200 (math/random))
-            #         dx (- 1 (* 2 (math/random)))
-            #         dy (- 1 (* 2 (math/random)))]
-            #     (add-entity world
-            #                 (position :x (+ (/ *screen-width* 2) x) :y y)
-            #                 (velocity :x dx :y dy)
-            #                 (gravity)
-            #                 (circle :radius 5 :color green))))
+            (loop [[i type] :pairs *fill-types*]
+              (add-entity world
+                          (ui-element :type type)
+                          (position :x (* i (/ *screen-width* (length *fill-types*))) :y 0)
+                          (size :x (/ *screen-width* (length *fill-types*)) :y *button-height*)))
 
-           # Systems
-            (register-system world sys-element-cup-collision)
-            (register-system world sys-element-element-collision)
-            (register-system world sys-move)
-            (register-system world sys-gravity)
-            (register-system world sys-draw-circle)
+            # Systems
+            (register-system world sys-fill)
+            (register-system world sys-draw-fill)
             (register-system world sys-draw-cup)
+            (register-system world sys-draw-ui)
             ))
 
- :update (fn game-update [self dt]
-           (:update (self :world) dt)
+  :update (fn game-update [self dt]
+            (:update (self :world) dt)
 
-           (when (key-pressed? :space)
-             (add-entity (self :world)
-                         (position :x (/ *screen-width* 2) :y 25.0)
-                         (velocity :x (- 1 (* 2 (math/random))) :y 10)
-                         (gravity)
-                         (circle :radius 7 :color green)))))
+           (set filling (key-down? :space))
+
+           (when (key-pressed? :p)
+             (:pause-game GS)))
+  )
 
 (:add-state GS pause)
 (:add-state GS game)
@@ -228,9 +143,9 @@
 
 (while (not (window-should-close))
   (begin-drawing)
-  (clear-background mantle)
+  (clear-background crust)
   (:update GS 1)
-  (draw-fps 10 10)
+  # (draw-fps 10 10)
   (end-drawing)
   )
 

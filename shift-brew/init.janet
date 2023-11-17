@@ -2,46 +2,67 @@
 (use junk-drawer)
 (use ./palette)
 
+(def GS (gamestate/init))
+
 (def *screen-width* 600)
 (def *screen-height* 400)
-(var filling false)
 (def *fill-types* [:bus :banter :auction :contest :game :dance])
 (def *color-map*
   { :bus red
     :banter peach
-    :auction blue
+    :auction yellow
     :contest green
-    :game yellow
+    :game blue
     :dance mauve })
 
-(var filled-amount 0)
-(var fill-type :game)
 (def *button-height* 30)
 
-(def GS (gamestate/init))
-
-(def *cup-color* sky)
+(def *fill-base-x* (+ 50 60 20))
+(def *fill-base-y* (- *screen-height* 49))
+(def *fill-width* 200)
+(def *cup-color* overlay1)
 (def *cup*
   [
    # BASE
-   [(- (/ *screen-width* 2) 110)
+   [(+ 50 60)
     (- *screen-height* 50)
     220 20]
 
    # LEFT
-   [(- (/ *screen-width* 2) 110)
+   [(+ 50 60)
     (- *screen-height* 300)
     20 270]
 
    # RIGHT
-   [(+ (/ *screen-width* 2) 90)
+   [(+ 50 60 220)
     (- *screen-height* 300)
     20 270]
+
+   # HANDLE MAIN
+   [50 (- *screen-height* 255)
+    20 150]
+
+   # HANDLE TOP
+   [50 (- *screen-height* 255)
+    60 20]
+
+   # HANDLE BOTTOM
+   [50 (- *screen-height* 105)
+    60 20]
    ])
 
-(def *fill-base-x* (- (/ *screen-width* 2) 100))
-(def *fill-base-y* (- *screen-height* 49))
-(def *fill-width* 200)
+(def *hour-ticks* (* 30 10))
+
+# Global vars
+(var fill-latch? false)
+(var filling? false)
+(var filled-amount 0)
+(var fill-type :bus)
+(var type-i 0)
+(var total-hours 1)
+(var hours 0)
+(var points 0)
+(var to-next-hour 10)
 
 # Components
 (def-component element :type :keyword :amount :number)
@@ -52,18 +73,18 @@
 # System Callbacks
 (def-system sys-fill
   { world :world }
-  (if filling
+  (if filling?
     (++ filled-amount)
     (when (> filled-amount 3)
       (add-entity world (element :type fill-type :amount filled-amount))
       (set filled-amount 0))))
 
-(def-system sys-draw-fill
-  { world :world
-    elements [:element] }
-
-  (if filling
-    (draw-rectangle (+ 5 (/ *screen-width* 2)) 0 10 *fill-base-y* (*color-map* fill-type)))
+(def-system sys-draw-fill { world :world
+                           elements [:element] }
+  (if filling? # Fill stream
+    (draw-rectangle (- (+ *fill-base-x* (/ *fill-width* 2)) 5) *button-height*
+                    10 (- *fill-base-y* *button-height*)
+                    (*color-map* fill-type)))
 
   (var top-base *fill-base-y*)
   (loop [[{ :type type :amount amount }] :in elements
@@ -76,36 +97,60 @@
   (draw-rectangle
     *fill-base-x* (- top-base filled-amount)
     *fill-width* filled-amount
-    (*color-map* fill-type))
-  )
+    (*color-map* fill-type)))
 
-(def-system sys-draw-cup
-  { wld :world }
+(def-system sys-draw-cup { wld :world }
   (each rec *cup*
     (draw-rectangle-rec rec *cup-color*)))
 
 (def-system sys-draw-ui
   { buttons [:ui-element :position :size] }
   (each [element pos size] buttons
-    (draw-rectangle-v (vector/unpack pos) (vector/unpack size) (*color-map* (element :type)))
+    # Button portion
+    (if (= (element :type) fill-type)
+      (draw-rectangle-v (vector/unpack pos) (vector/unpack size) (*color-map* (element :type))))
+
+    # Text Shadow
     (draw-text (string (element :type))
                ;(vector/unpack (:add (vector/clone pos) 7))
                20 base)
+    # Text
     (draw-text (string (element :type))
                ;(vector/unpack (:add (vector/clone pos) 5))
                20 text))
+  # Selected
   (draw-rectangle 0 *button-height* *screen-width* (/ *button-height* 2) (*color-map* fill-type)))
 
-(gamestate/def-state
-  pause
-  :update (fn pause-update [self dt]
-            (draw-poly [100 100] 5 40 0 rosewater)
+(def-system sys-draw-score
+  { world :world }
+  (let [txtx (- *screen-width* 200)
+        txtymid (/ *screen-height* 2)]
+    (draw-text (string/format "$%i Raised!" points) txtx (- txtymid 35) 20 text)
+    (draw-text (string/format "%i hours of" hours) txtx (- txtymid 10) 20 text)
+    (draw-text (string/format "%i hours so far" total-hours) txtx (+ txtymid 10) 20 text)))
 
+(def-system sys-game-over
+  { wld :world
+    elements [:entity :element] }
+  (when (= hours total-hours)
+    # Clean up entities here
+    (each [ent _] elements (remove-entity wld ent))
+    (print "GAME OVER")
+    (:fail GS)))
+
+(gamestate/def-state gameover
+  :update (fn gameover-update [self dt]
             (when (key-pressed? :space)
-              (:unpause-game GS))))
+              # Restart the game
+              (set total-hours 1)
+              (set hours 0)
+              (set fill-latch? false)
+              (set type-i 0)
+              (set filled-amount 0)
+              (:restart GS))
+            (draw-text "GAME\nOVER" (/ *screen-width* 2) (/ *screen-height* 2) 30 red)))
 
-(gamestate/def-state
-  game
+(gamestate/def-state game
   :world (create-world)
   :init (fn game-init [self]
           (let [world (get self :world)]
@@ -115,43 +160,55 @@
                           (position :x (* i (/ *screen-width* (length *fill-types*))) :y 0)
                           (size :x (/ *screen-width* (length *fill-types*)) :y *button-height*)))
 
+            (timers/every world *hour-ticks*
+                          (fn [wld dt] (++ hours)))
+
             # Systems
+            (register-system world timers/update-sys)
             (register-system world sys-fill)
             (register-system world sys-draw-fill)
             (register-system world sys-draw-cup)
             (register-system world sys-draw-ui)
+            (register-system world sys-draw-score)
+            (register-system world sys-game-over)
             ))
 
   :update (fn game-update [self dt]
             (:update (self :world) dt)
+            (if (and (key-up? :space)
+                     (not fill-latch?))
+              (set fill-latch? true))
+            (set filling? (and fill-latch? (key-down? :space)))
+            (when (not filling?)
+              (if (key-pressed? :left)
+                (if (> type-i 0) (-- type-i)))
+              (if (key-pressed? :right)
+                (if (< type-i (- (length *fill-types*) 1)) (++ type-i))))
 
-           (set filling (key-down? :space))
+            (set fill-type (*fill-types* type-i))))
 
-           (when (key-pressed? :p)
-             (:pause-game GS)))
-  )
-
-(:add-state GS pause)
 (:add-state GS game)
+(:add-state GS gameover)
 
-(:add-edge GS (gamestate/transition :pause-game :game :pause))
-(:add-edge GS (gamestate/transition :unpause-game :pause :game))
+(:add-edge GS (gamestate/transition :fail :game :gameover))
+(:add-edge GS (gamestate/transition :restart :gameover :game))
 
 (:goto GS :game)
 
-(init-window *screen-width* *screen-height* "Shift Brew")
-(set-target-fps 30)
-(hide-cursor)
+(defn main [& args]
+  (init-window *screen-width* *screen-height* "Shift Brew")
+  (set-target-fps 30)
+  (hide-cursor)
 
-(def target (load-render-texture *screen-width* *screen-height*))
+  (def target (load-render-texture *screen-width* *screen-height*))
 
-(while (not (window-should-close))
-  (begin-drawing)
-  (clear-background crust)
-  (:update GS 1)
-  # (draw-fps 10 10)
-  (end-drawing)
-  )
+  (while (not (window-should-close))
+    (begin-drawing)
+    (clear-background crust)
+    (:update GS 1)
+    # (draw-fps 10 10)
+    (end-drawing)
+    )
 
-(unload-render-texture target)
-(close-window)
+  (unload-render-texture target)
+  (close-window))

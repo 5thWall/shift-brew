@@ -220,6 +220,22 @@
     (print "GAME OVER")
     (:fail GS)))
 
+(gamestate/def-state gamestart
+  :world (create-world)
+  :init (fn gamestart-init [self]
+          (let [world (self :world)]
+            (register-system world sys-draw-shift)
+            (register-system world sys-draw-cup)
+            ))
+
+  :update (fn gamestart-update [self dt]
+            (:update (self :world) dt)
+            (draw-text "[SPACEBAR]!"
+              (- *screen-width* 200) (- (/ *screen-height* 2) 6)
+              26 green)
+            (if (key-pressed? :space)
+              (:start GS))))
+
 (gamestate/def-state gameover
   :update (fn gameover-update [self dt]
             (when (key-pressed? :space)
@@ -273,13 +289,15 @@
 
             (set fill-type (*fill-types* type-i))))
 
+(:add-state GS gamestart)
 (:add-state GS game)
 (:add-state GS gameover)
 
+(:add-edge GS (gamestate/transition :start :gamestart :game))
 (:add-edge GS (gamestate/transition :fail :game :gameover))
 (:add-edge GS (gamestate/transition :restart :gameover :game))
 
-(:goto GS :game)
+(:goto GS :gamestart)
 
 (defn main [& args]
   (init-window *screen-width* *screen-height* "Shift Brew")

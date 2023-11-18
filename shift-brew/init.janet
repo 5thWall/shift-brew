@@ -64,7 +64,7 @@
                   :amount 60 }] }
   ])
 
-(def *hour-ticks* (* 30 10))
+(def *hour-ticks* (* 30 20))
 
 # Global vars
 (var shift (*shifts* 0))
@@ -193,7 +193,10 @@
               (set hours 0)
               (set type-i 0)
               (:restart GS))
-            (draw-text "GAME\nOVER" (/ *screen-width* 2) (/ *screen-height* 2) 30 red)))
+            (draw-text "GAME\nOVER" (/ *screen-width* 2) (/ *screen-height* 2) 30 red)
+            (draw-text (string/format "You raised: $%i!" points)
+                       50 50
+                       35 green)))
 
 (gamestate/def-state game
   :world (create-world)

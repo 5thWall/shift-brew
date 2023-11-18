@@ -119,9 +119,13 @@
       (draw-text (string t)
                  (+ *fill-base-x* 30) (+ top-base 5)
                  20 color)))
-  (draw-text (string/format "%s Shift" (shift :name))
-             (+ *fill-base-x* 10)
-             (+ *fill-base-y* 25)
+  (draw-text (string/format "Shift: %s" (shift :name))
+             (- *screen-width* 228)
+             (- (/ *screen-height* 2) 68)
+             22 red)
+  (draw-text (string/format "Shift: %s" (shift :name))
+             (- *screen-width* 230)
+             (- (/ *screen-height* 2) 70)
              22 text))
 
 (def-system sys-draw-fill { world :world

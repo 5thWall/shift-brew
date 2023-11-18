@@ -21,7 +21,7 @@
 (def *fill-base-y* (- *screen-height* 49))
 (def *fill-width* 200)
 (def *cup-color* overlay1)
-(def *max-fill* (- 270 20 4))
+(def *max-fill* (- 270 20 10))
 (def *cup*
   [
    # BASE
@@ -52,9 +52,22 @@
     60 20]
    ])
 
+(def *shifts*
+  [{ :name "Crab Rave"
+     :elements [{ :type :bus
+                  :amount 60 }
+                { :type :game
+                  :amount 60 }
+                { :type :auction
+                  :amount 60 }
+                { :type :dance
+                  :amount 60 }] }
+  ])
+
 (def *hour-ticks* (* 30 10))
 
 # Global vars
+(var shift (*shifts* 0))
 (var fill-latch? false)
 (var filling? false)
 (var filled-amount 0)
@@ -91,6 +104,25 @@
     (when (> filled-amount 3)
       (add-entity world (element :type fill-type :amount filled-amount))
       (set filled-amount 0))))
+
+(def-system sys-draw-shift { world :world }
+  (var top-base *fill-base-y*)
+  (each { :type t :amount a } (shift :elements)
+    (-= top-base a)
+    (let [color (*color-map* t)]
+      (draw-line-ex [*fill-base-x* top-base]
+                    [(+ *fill-base-x* *fill-width*) top-base]
+                    2 color)
+      # (draw-text (string t)
+      #            (+ *fill-base-x* 32) (+ top-base 7)
+      #            20 overlay0)
+      (draw-text (string t)
+                 (+ *fill-base-x* 30) (+ top-base 5)
+                 20 color)))
+  (draw-text (string/format "%s Shift" (shift :name))
+             (+ *fill-base-x* 10)
+             (+ *fill-base-y* 25)
+             22 text))
 
 (def-system sys-draw-fill { world :world
                            elements [:element] }
@@ -134,13 +166,12 @@
   # Selected
   (draw-rectangle 0 *button-height* *screen-width* (/ *button-height* 2) (*color-map* fill-type)))
 
-(def-system sys-draw-score
-  { world :world }
+(def-system sys-draw-score { world :world }
   (let [txtx (- *screen-width* 200)
         txtymid (/ *screen-height* 2)]
     (draw-text (string/format "$%i Raised!" points) txtx (- txtymid 35) 20 text)
     (draw-text (string/format "%i hours of" hours) txtx (- txtymid 10) 20 text)
-    (draw-text (string/format "%i hours so far" total-hours) txtx (+ txtymid 10) 20 text)))
+    (draw-text (string/format "%i so far" total-hours) txtx (+ txtymid 10) 20 text)))
 
 (def-system sys-score { wld :world
                         elements [:entity :element] }
@@ -190,12 +221,13 @@
             # Systems
             (register-system world timers/update-sys)
             (register-system world sys-fill)
+            (register-system world sys-draw-shift)
             (register-system world sys-draw-fill)
             (register-system world sys-draw-cup)
             (register-system world sys-draw-ui)
             (register-system world sys-draw-score)
             (register-system world sys-score)
-            (register-system world sys-game-over)
+            # (register-system world sys-game-over)
             ))
 
   :update (fn game-update [self dt]

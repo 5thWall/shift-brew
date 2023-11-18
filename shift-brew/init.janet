@@ -53,15 +53,46 @@
    ])
 
 (def *shifts*
-  [{ :name "Crab Rave"
+  [{ :name "Crab"
      :elements [{ :type :bus
                   :amount 60 }
-                { :type :game
+                { :type :contest
                   :amount 60 }
                 { :type :auction
                   :amount 60 }
                 { :type :dance
                   :amount 60 }] }
+   { :name "Cult?"
+     :elements [{ :type :banter
+                  :amount 45 }
+                { :type :dance
+                  :amount 45 }
+                { :type :banter
+                  :amount 45 }
+                { :type :dance
+                  :amount 45 }
+                { :type :auction
+                  :amount 30 }
+                { :type :bus
+                  :amount 30 }] }
+   { :name "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+     :elements [{ :type :auction
+                  :amount 45 }
+                { :type :bus
+                  :amount 120 }
+                { :type :game
+                  :amount 75 }] }
+   { :name "Country"
+     :elements [{ :type :banter
+                  :amount 60 }
+                { :type :game
+                  :amount 40 }
+                { :type :dance
+                  :amount 30 }
+                { :type :bus
+                  :amount 60 }
+                { :type :contest
+                  :amount 50 }]}
   ])
 
 (def *hour-ticks* (* 30 20))
@@ -76,6 +107,7 @@
 (var hours 0)
 (var points 0)
 (var to-next-hour 10)
+(var rng (math/rng))
 
 # Components
 (def-component element :type :keyword)
@@ -84,11 +116,15 @@
 (def-component-alias size vector/from-named)
 
 # Utility
+(defn random-indexed [rng ind]
+  (ind (math/rng-int rng (length ind))))
+
 (defn latch! []
   (set fill-latch? false))
 
 (defn reset! []
-  (latch!))
+  (latch!)
+  (set shift (random-indexed rng *shifts*)))
 
 (defn score [_]
   (+= points 100)
@@ -249,6 +285,8 @@
   (init-window *screen-width* *screen-height* "Shift Brew")
   (set-target-fps 30)
   (hide-cursor)
+
+  (set rng (math/rng (os/time)))
 
   (def target (load-render-texture *screen-width* *screen-height*))
 

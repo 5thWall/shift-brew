@@ -70,7 +70,6 @@
 (var shift (*shifts* 0))
 (var fill-latch? false)
 (var filling? false)
-(var filled-amount 0)
 (var fill-type :bus)
 (var type-i 0)
 (var total-hours 1)
@@ -79,7 +78,7 @@
 (var to-next-hour 10)
 
 # Components
-(def-component element :type :keyword :amount :number)
+(def-component element :type :keyword)
 (def-component ui-element :type :keyword)
 (def-component-alias position vector/from-named)
 (def-component-alias size vector/from-named)
@@ -89,8 +88,7 @@
   (set fill-latch? false))
 
 (defn reset! []
-  (latch!)
-  (set filled-amount 0))
+  (latch!))
 
 (defn score [_]
   (+= points 100)
@@ -100,10 +98,7 @@
 (def-system sys-fill
   { world :world }
   (if filling?
-    (++ filled-amount)
-    (when (> filled-amount 3)
-      (add-entity world (element :type fill-type :amount filled-amount))
-      (set filled-amount 0))))
+    (add-entity world (element :type fill-type))))
 
 (def-system sys-draw-shift { world :world }
   (var top-base *fill-base-y*)
@@ -119,10 +114,10 @@
       (draw-text (string t)
                  (+ *fill-base-x* 30) (+ top-base 5)
                  20 color)))
-  (draw-text (string/format "Shift: %s" (shift :name))
-             (- *screen-width* 228)
-             (- (/ *screen-height* 2) 68)
-             22 red)
+  # (draw-text (string/format "Shift: %s" (shift :name))
+  #            (- *screen-width* 228)
+  #            (- (/ *screen-height* 2) 68)
+  #            22 red)
   (draw-text (string/format "Shift: %s" (shift :name))
              (- *screen-width* 230)
              (- (/ *screen-height* 2) 70)
@@ -136,17 +131,12 @@
                     (*color-map* fill-type)))
 
   (var top-base *fill-base-y*)
-  (loop [[{ :type type :amount amount }] :in elements
-         :before (-= top-base amount)]
-    (draw-rectangle
-      *fill-base-x* top-base
-      *fill-width* amount
-      (*color-map* type)))
-
-  (draw-rectangle
-    *fill-base-x* (- top-base filled-amount)
-    *fill-width* filled-amount
-    (*color-map* fill-type)))
+  (each [{ :type type }] elements
+    (draw-line-ex
+      [*fill-base-x* top-base]
+      [(+ *fill-base-x* *fill-width*) top-base]
+      1 (*color-map* type))
+    (-- top-base)))
 
 (def-system sys-draw-cup { wld :world }
   (each rec *cup*
@@ -179,11 +169,7 @@
 
 (def-system sys-score { wld :world
                         elements [:entity :element] }
-  (var total-fill
-    (reduce
-      (fn [acc el] (+ acc el))
-      filled-amount
-      (mapcat (fn [el] ((el 1) :amount)) elements)))
+  (var total-fill (length elements))
 
   (when (>= total-fill *max-fill*)
     (score (mapcat (fn [el] (el 1)) elements))

@@ -21,6 +21,7 @@
 (def *fill-base-y* (- *screen-height* 49))
 (def *fill-width* 200)
 (def *cup-color* overlay1)
+(def *max-fill* (- 270 20 4))
 (def *cup*
   [
    # BASE
@@ -69,6 +70,18 @@
 (def-component ui-element :type :keyword)
 (def-component-alias position vector/from-named)
 (def-component-alias size vector/from-named)
+
+# Utility
+(defn latch! []
+  (set fill-latch? false))
+
+(defn reset! []
+  (latch!)
+  (set filled-amount 0))
+
+(defn score [_]
+  (+= points 100)
+  (++ total-hours))
 
 # System Callbacks
 (def-system sys-fill
@@ -129,9 +142,21 @@
     (draw-text (string/format "%i hours of" hours) txtx (- txtymid 10) 20 text)
     (draw-text (string/format "%i hours so far" total-hours) txtx (+ txtymid 10) 20 text)))
 
-(def-system sys-game-over
-  { wld :world
-    elements [:entity :element] }
+(def-system sys-score { wld :world
+                        elements [:entity :element] }
+  (var total-fill
+    (reduce
+      (fn [acc el] (+ acc el))
+      filled-amount
+      (mapcat (fn [el] ((el 1) :amount)) elements)))
+
+  (when (>= total-fill *max-fill*)
+    (score (mapcat (fn [el] (el 1)) elements))
+    (reset!)
+    (each [ent _] elements (remove-entity wld ent))))
+
+(def-system sys-game-over { wld :world
+                           elements [:entity :element] }
   (when (= hours total-hours)
     # Clean up entities here
     (each [ent _] elements (remove-entity wld ent))
@@ -142,11 +167,10 @@
   :update (fn gameover-update [self dt]
             (when (key-pressed? :space)
               # Restart the game
+              (reset!)
               (set total-hours 1)
               (set hours 0)
-              (set fill-latch? false)
               (set type-i 0)
-              (set filled-amount 0)
               (:restart GS))
             (draw-text "GAME\nOVER" (/ *screen-width* 2) (/ *screen-height* 2) 30 red)))
 
@@ -170,6 +194,7 @@
             (register-system world sys-draw-cup)
             (register-system world sys-draw-ui)
             (register-system world sys-draw-score)
+            (register-system world sys-score)
             (register-system world sys-game-over)
             ))
 

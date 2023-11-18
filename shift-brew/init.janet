@@ -217,7 +217,7 @@
             (register-system world sys-draw-ui)
             (register-system world sys-draw-score)
             (register-system world sys-score)
-            # (register-system world sys-game-over)
+            (register-system world sys-game-over)
             ))
 
   :update (fn game-update [self dt]

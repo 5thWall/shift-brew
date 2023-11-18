@@ -17,10 +17,6 @@
       (math/floor (pos :x)) (math/floor (pos :y))
       (circle :radius) (circle :color))))
 
-(def-system sys-draw-cup
-  { wld :world }
-  (each rec *cup*
-    (draw-rectangle-rec rec blue)))
 
 (def-system sys-gravity
   { falling [:velocity :gravity] }
